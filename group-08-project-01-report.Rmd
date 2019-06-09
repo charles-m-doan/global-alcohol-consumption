@@ -1,0 +1,681 @@
+---
+title: 'STAT 3202: Group Project I'
+author: "Charles Doan, Yiting Chen, Hannah Mazzei, Jaima Schulte"
+date: 'OSU, Spring Semester: 02/26/2019'
+output:
+  html_document:
+    css: styles.css
+    theme: spacelab
+    toc: yes
+  pdf_document: default
+urlcolor: BrickRed
+---
+
+***
+
+```{r setup, include = FALSE, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+```{r set-options, echo=FALSE, cache=FALSE}
+options(width = 1000)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+#############################################################
+#    STAT 3202: SP/2019                                     #
+#    Group Project I                                        #
+#    Chen, Yiting <chen.7979@buckeyemail.osu.edu>           #
+#    Doan, Matthew <doan.115@buckeyemail.osu.edu>           #
+#    Mazzei, Hannah E. <mazzei.63@buckeyemail.osu.edu>      #
+#    Schulte, Jaima <schulte.173@buckeyemail.osu.edu>       #
+#############################################################
+
+
+# INTILIZATION -------------------------------------------------
+
+#Set the working directory to the path containing the source and data files
+  baseDirectory <- "C:/Users/cmatt/OneDrive/Documents/OSU/Semester 04 (Spring 2019)/STAT 3202/Group Project I"
+  setwd(baseDirectory)
+
+# Import relevant data into global environment
+  # Load data file
+    gp01_data <- read.csv("https://daviddalpiaz.github.io/stat3202-sp19/project/proj-01/data/drinks.csv", header = TRUE)
+
+  # Clean up data for convenience and include total servings
+    drinkServingsByCountry <- data.frame(country=gp01_data$country,
+                                         beer=gp01_data$beer_servings,
+                                         spirits=gp01_data$spirit_servings,
+                                         wine=gp01_data$wine_servings,
+                                         total=(gp01_data$beer_servings + gp01_data$spirit_servings + gp01_data$wine_servings),
+                                         stringsAsFactors = FALSE)
+    rm(gp01_data) # Get rid of initial data frame
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# FUNCTIONS AND GLOBALS ----------------------------------------
+
+# CALCULATION FUNCTIONS
+  # SUMMARY STATS -----------------------------------------
+
+    # Nine Number Summary
+    # Returns the following sample statistics in order: {mean, std dev, min, 2.5th quantile, Q1, median, Q3, 97.5th quantile, max}
+    calc.nineNumSummary <- function(dataName="Sample Data", sampleValues=c(0)) {
+      sMean <- mean(sampleValues)
+      sSD <- sqrt(var(sampleValues))
+      fiveNumStats = fivenum(sampleValues)
+      q025 = quantile(sampleValues, 0.025)
+      q975 = quantile(sampleValues, 0.975)
+      list(Name = dataName, Mean = sMean, StdDev = sSD, Min = fiveNumStats[1],
+           Qt025 = quantile(sampleValues, 0.025), Q1 = fiveNumStats[2], Med = fiveNumStats[3],
+           Q3 = fiveNumStats[4], Qt975 = quantile(sampleValues, 0.975), Max = fiveNumStats[5])
+    }
+
+  # SAMPLE MOMENT GENERATION ------------------------------
+
+    # Kth Sample Moment - Takes a sample of data and returns the Kth Sample Moment
+    calc.KthSampleMoment <- function(sampleData=c(0,1,2), k=1) {
+      sampleMoment <- mean(sampleData^k)
+      return(sampleMoment);
+    }
+    
+    # K Sample Moments - Takes a sample of data and returns sample moments 1 through K as a vector
+    calc.KSampleMoments <- function(sampleData=c(0,1,2), k=1) {
+      if(k < 1 || length(sampleData) < 1)
+        {
+        return(c(-1))
+        }
+      sampleMoments <- rep(0,k)
+      for (i in seq_along(sampleMoments))
+        {
+        sampleMoments[i] = mean(sampleData^i)
+        }
+      return(sampleMoments);
+    }
+    
+  # GAMMA ESTIMATION --------------------------------------
+
+    # GAMMA: MoM Estimation of Alpha (Shape) Parameter
+    calc.estimateAlphaForGammaDistUsingMoM <- function(sampleMoment01 = 1, sampleMoment02 = 2) {
+      alphaEstimate <- ((sampleMoment01^2)/(sampleMoment02-(sampleMoment01^2)))
+      return(alphaEstimate)
+    }
+    
+    # GAMMA: MoM Estimation of Beta (Scale) Parameter
+    calc.estimateBetaForGammaDistUsingMoM <- function(sampleMoment01 = 1, sampleMoment02 = 1) {
+      betaEstimate <- ((sampleMoment02-(sampleMoment01^2))/sampleMoment01)
+      return(betaEstimate)
+    }
+    
+    # GAMMA: Estimate Parameters - Alpha (Shape) and Beta (Scale) - using MoM
+    calc.estimateGammaParametersUsingMoM <- function(sampleData = rgamma(10, shape=1, scale=2)) {
+      if(length(sampleData) < 1)
+        {
+        return(c(shape=1, scale=1))
+        }
+      sampleMoments <- calc.KSampleMoments(sampleData = sampleData, k = 2)
+      alphaEstimate <- calc.estimateAlphaForGammaDistUsingMoM(sampleMoment01 = sampleMoments[1], sampleMoment02 = sampleMoments[2])
+      betaEstimate <- calc.estimateBetaForGammaDistUsingMoM(sampleMoment01 = sampleMoments[1], sampleMoment02 = sampleMoments[2])
+      gammaParameters <- c(shape=alphaEstimate, scale=betaEstimate)
+      return(gammaParameters)
+    }
+
+  # EXPONENTIAL/POISSON ESTIMATION --------------------------------
+    # Parameters for the Exponential and the Poisson are calculated in the same way.
+    
+    # EXPONENTIAL/POISSON: Estimation of Lambda (rate = 1/scale) using MoM (MLE estimator is the same as MoM).
+    calc.estimateLambdaUsingMoM <- function(sampleData = c(0,1,2,3)) {
+      if(length(sampleData) < 1)
+        {
+        return(1)
+        }
+      #Same as the inverse of the mean/expected value - i.e. inverse of the first sample moment
+      sampleMoment <- calc.KthSampleMoment(sampleData = sampleData, k = 1)
+      lambdaEstimate <- (1/sampleMoment)
+      return(lambdaEstimate)
+    }
+    
+    # EXPONENTIAL/POISSON: Estimation of Beta (scale = 1/rate) using MoM (MLE estimator is the same as MoM).
+    calc.estimateBetaUsingMoM <- function(sampleData = c(0,1,2,3)) {
+      if(length(sampleData) < 1)
+        {
+        return(1)
+        }
+      #Same as the mean/expected value - i.e. the first sample moment
+      betaEstimate <- calc.KthSampleMoment(sampleData = sampleData, k = 1)
+      return(betaEstimate)
+    }
+
+#RENDERING FUNCTIONS
+  # LOAD LIBRARIES -----------------------------------------------
+    #if (!require("grid")) install.packages('grid')
+      library(grid)
+    #if (!require("ggplot2")) install.packages('ggplot2')
+      library(ggplot2)
+    #if (!require("gridExtra")) install.packages('gridExtra')
+      library(gridExtra)
+    #if (!require("rworldmap")) install.packages('rworldmap')
+      library(rworldmap)
+    #if (!require("RColorBrewer")) install.packages('RColorBrewer')
+      library(RColorBrewer)
+    #if (!require("classInt")) install.packages('classInt')
+      library(classInt)
+
+  # Rendering Global Constants -------------------------------------
+    gammaColor_curves <- "red"
+    exponentialColor_curves <- "blue"
+    barColor_beer <- "palegreen1"
+    borderColor_beer <- "palegreen4"
+    barColor_spirits <- "lightblue1"
+    borderColor_spirits <- "lightsteelblue4"
+    barColor_wine <- "plum2"
+    borderColor_wine <- "plum3"
+    barColor_total <- "peachpuff"
+    borderColor_total <- "peachpuff4"
+    preferredPCHs <- c(1,3,18,0,20,4)
+
+  # HISTOGRAMS, BOX PLOTS, AND DENSITY PLOTS ---------------------------------
+  
+  render.HistogramAndBoxPlot <- function(sampleData = c(1, 2, 3),
+                                                    alcoholType="Alcohol",
+                                                    barColor=barColor_total,
+                                                    borderColor=borderColor_total) {
+    hist(sampleData,
+         main=paste(alcoholType," Consumption for ", length(sampleData)," Countries",sep=""),
+         xlab = paste("Average Servings of",alcoholType,"Per Capita"),
+         ylab = "Frequency",
+         col = barColor,
+         border = borderColor,
+         probability = FALSE)
+    box()
+    grid()
+    boxplot(sampleData,
+            main = paste(alcoholType," Consumption for ", length(sampleData)," Countries",sep=""),
+            col = barColor,
+            border = "black",
+            xlab = paste("Average Servings of",alcoholType,"Per Capita"),
+            horizontal = TRUE)
+  }
+  
+  # Renders a histogram of the supplied data as a density display,
+  # and draws the Gamma and Exponential curves defined by the argument parameters.
+  render.HistogramAndDistributionCurves <- function(sampleData = c(1, 2, 3),
+                                                    gammaParams = c(shape = 0, scale = 1),
+                                                    exponentialParams = c(scale = 1),
+                                                    alcoholType="Alcohol",
+                                                    barColor="red",
+                                                    borderColor="gray",
+                                                    gammaColor=gammaColor_curves,
+                                                    exponentialColor=exponentialColor_curves) {
+    hist(sampleData,
+         main=paste(alcoholType," Consumption for ", length(sampleData)," Countries",sep=""),
+         xlab = paste("Average Servings of",alcoholType,"Per Capita"),
+         ylab = "Probability Density",
+         col = barColor,
+         border = borderColor,
+         probability = TRUE)
+    box()
+    grid()
+    curve(dgamma(x, shape = gammaParams[1], scale = gammaParams[2]), add = TRUE, col = gammaColor, lwd = 2)
+    curve(dexp(x, rate = (1/exponentialParams[1])), add = TRUE, col = exponentialColor, lwd = 3, lty = 2)
+    legend("topright",
+           c(paste("Estimated Gamma\n  shape=",signif(gammaParams[1],3),"\n  scale=",signif(gammaParams[2],3),sep=""),
+             paste("Estimated Exponential\n  rate=",signif(1/exponentialParams[1],3),sep="")),
+           col=c(gammaColor, exponentialColor),
+           lwd=5,
+           lty=c(1,3))
+  }
+  
+  # QQ-PLOTS -------------------------------------------------------
+  
+  render.QQPlotsForDists <- function(sampleData = c(0), distFuncs=list(dist01 = qgamma),
+     listOfDistParams=list(dist01=c(shape=1.11, scale=95.9)), distColors=list(dist01="red"),
+     distNames=list(dist01="Gamma"), alcoholType="Alcohol", lineCol="dodgerblue")
+  {
+    plotPoints <- ppoints(sampleData)
+    distCount <- length(distFuncs)
+    for(i in 1:distCount)
+    {
+      funcArguments <- c(list(p=plotPoints), listOfDistParams[[i]])
+      xVals <- do.call(distFuncs[[i]], args = funcArguments)
+      lims <- render.getQQLims(sampleData = sampleData, estimationDataSets=list(xVals), padding=0, square=TRUE)
+      qqplot(x = xVals,
+             y = sampleData,
+             xlim = lims$xlims,
+             ylim = lims$ylims,
+             main = paste("QQ-Plot: ",alcoholType," Consumption Per Capita",sep=""),
+             xlab = paste("Theoretical Quantiles for",distNames[[i]],"Distribution"),
+             ylab = paste("Sample Quantiles, ",alcoholType," Servings",sep=""),
+             col=distColors[[i]])
+      abline(a = 0, b = 1, col = lineCol, lwd = 2)
+      grid()
+    }
+  }
+  
+  render.OverlayQQPlotsForDists <- function(sampleData = c(0), distFuncs=list(dist01 = qgamma),
+                                            listOfDistParams=list(dist01=c(shape=1.11, scale=95.9)), distColors=list(dist01=gammaColor_curves),
+                                            distNames=list(dist01="Gamma"), alcoholType="Alcohol", lineCol="black")
+  {
+    distCount <- length(distFuncs) # Number of theoretical distributions to plot
+    listOfXVals <- list() #These are the theoretical quantiles corresponding to the sample data for each theoretical distribution
+    yVals <- sort(sampleData) #These are the same for all theoretical distributions
+    densityVals <- ppoints(sampleData) #probability points for determining theoretical quantile values
+    
+    for(i in 1:distCount)
+      {
+      keyName <- paste("Dist",i,sep="")
+      funcArguments <- c(list(p=densityVals), listOfDistParams[[i]])
+      listOfXVals[[keyName]] <- do.call(distFuncs[[i]], args = funcArguments)
+      }
+    # x and y limits for the quantile-quantile plot (captures all theoretical points in the minimum intervals for all dists)
+    qqLims <- render.getQQLims(sampleData = yVals, estimationDataSets=listOfXVals, padding=0, square=TRUE)
+    
+    plot(x=c(0),y=c(0),
+         xlim = qqLims$xlims,
+         ylim = qqLims$ylims,
+         main = paste("QQ-Plot: ",alcoholType," Consumption Per Capita",sep=""),
+         xlab = paste("Theoretical Values"),
+         ylab = paste("Sample Values (",alcoholType," Servings)",sep=""))
+    grid()
+    abline(a = 0, b = 1, col = lineCol, lty=1, lwd = 3)
+    
+    for(i in 1:distCount)
+      {
+      points(x = listOfXVals[[i]],
+             y = yVals,
+             pch=preferredPCHs[(i%%length(preferredPCHs))],
+             col=distColors[[i]])
+      }
+    abline(a = 0, b = 1, col = lineCol, lty=2, lwd = 2)
+    
+    labs <- rep("", distCount)
+    cols <- rep("", distCount)
+    for(i in 1:distCount)
+      {
+      labs[i] <- paste("Estimated ",distNames[[i]],sep="")
+      cols[i] <- distColors[[i]]
+      }
+    legend("topleft",
+           labs,
+           col=cols,
+           pch=preferredPCHs[((1:distCount)%%length(preferredPCHs))])
+  }
+  
+  # "sampleData" = original data set
+  # "estimationDataSets" = a list of numerical vectors (must contain at least 1 vector)
+  render.getQQLims <- function(sampleData, estimationDataSets, padding=0.05, square=TRUE)
+  {
+    #Y axis represents sample data
+    sampleRange <- range(sampleData)
+    sampleRangeLength <- abs(sampleRange[2] - sampleRange[1])
+    minYLim <- floor(min(sampleRange) - (padding * sampleRangeLength))
+    maxYLim <- ceiling(max(sampleRange) + (padding * sampleRangeLength))
+    
+    #X axis represents estimated values (must find the range that captures all points in all argument data sets)
+    numberOfDataSets <- length(estimationDataSets)
+    set1Range <- range(estimationDataSets[1])
+    minXLim <- min(set1Range)
+    maxXLim <- max(set1Range)
+    i <- 2
+    while(i <= numberOfDataSets)
+    {
+      estRange <- range(estimationDataSets[i])
+      minXLim <- min(minXLim, min(estRange))
+      maxXLim <- max(maxXLim, max(estRange))
+      i <- i+1
+    }
+    xLimRangeLength <- abs(maxXLim - minXLim)
+    minXLim <- floor(minXLim - (padding * xLimRangeLength))
+    maxXLim <- ceiling(maxXLim + (padding * xLimRangeLength))
+    
+    if(square)
+    {
+      xLims <- c(min(minXLim, minYLim),max(maxXLim, maxYLim))
+      yLims <- c(min(minXLim, minYLim),max(maxXLim, maxYLim))
+    } else
+    {
+      xLims <- c(minXLim, maxXLim)
+      yLims <- c(minYLim, maxYLim)
+    }
+    return( list(xlims=xLims, ylims=yLims) )
+  }
+
+  # DATA TABLE ---------------------------------------------------
+
+    # Takes a list of summary statistics then renders their values into a table.
+    render.SummaryStatsTable <- function(statSetList, title="Summary Stats for Data Sets",
+        colNames=c("Data Set","Mean","Std Dev","Min","2.5th\nPCTL", "Q1", "Median", "Q3", "97.5th\nPCTL", "Max")) {
+      rows <- length(statSetList)
+      #Init Data Frame Vectors
+      dataSetNames <- rep("Data Set", rows)
+      means <- rep(0,rows)
+      sds <- rep(0,rows)
+      mins <- rep(0,rows)
+      Qt025s <- rep(0,rows)
+      Q1s <- rep(0,rows)
+      medians <- rep(0,rows)
+      Q3s <- rep(0,rows)
+      Qt975s <- rep(0,rows)
+      maxs <- rep(0,rows)
+      for(i in 1:rows)
+        {
+        ssl <- getElement(statSetList,i)
+        dataSetNames[i] <- ssl$Name
+        means[i] <- ssl$Mean
+        sds[i] <- ssl$StdDev
+        mins[i] <- ssl$Min
+        Qt025s[i] <- ssl$Qt025
+        Q1s[i] <- ssl$Q1
+        medians[i] <- ssl$Med
+        Q3s[i] <- ssl$Q3
+        Qt975s[i] <- ssl$Qt975
+        maxs[i] <- ssl$Max
+      }
+      summaryStatsTable <- data.frame(dataSetNames,means,sds,mins,Qt025s,Q1s,medians,Q3s,Qt975s,maxs,stringsAsFactors = FALSE)
+      colnames(summaryStatsTable) <- colNames
+      plot.new()
+      title(title)
+      grid.table(summaryStatsTable, rows = NULL)
+    }
+
+  # WORLD MAPS ----------------------------------------------------
+
+  # This is a fairly unneccessary function, but it's nice to have some default values that work, along with capturing
+  # the annoying print messages from the "joincountryData2Map" function.
+    render.createSPDF <- function(dataFrame=NULL, joinCode = "NAME", nameJoinColumn = "country", mapResolution = 'coarse') {
+      annoyingMessages <- capture.output(sPDF <- joinCountryData2Map(dataFrame, joinCode = joinCode, nameJoinColumn = nameJoinColumn, mapResolution=mapResolution))
+      return(sPDF)
+    }
+    
+  # Displays a world map based on the arguments provided.
+    render.showWorldMap <- function(sPDF=NULL,
+      nameColumnToPlot="total", mapTitle="Map of Total Alcohol Consumption\n(Servings Per Capita)", intervals = 9, palName="OrRd") {
+      #getting class intervals using a jenks classification in classInt package
+      classInt <- classInt::classIntervals( sPDF[[nameColumnToPlot]], n=intervals, style="jenks")
+      catMethod = classInt[["brks"]]
+      #getting a colour scheme from the RColorBrewer package
+      colourPalette <- brewer.pal(intervals,palName)
+      #adjust graphics settings
+      #mapDevice(device="png", titleSpace = 1, rows = 1, columns = 1)
+      #calling mapCountryData with the parameters from RColorBrewer
+      mapParams <- mapCountryData( sPDF, nameColumnToPlot=nameColumnToPlot,
+                                   addLegend=FALSE,
+                                   catMethod = catMethod,
+                                   colourPalette=colourPalette,
+                                   missingCountryCol = "black",
+                                   mapTitle=mapTitle)
+      do.call( addMapLegend, c(mapParams, horizontal=TRUE, legendWidth=0.7, legendLabels = "all", legendIntervals = "page"))
+    }
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# CALCULATIONS -------------------------------------------------
+  # SUMMARY STATS ----------------------------------------------
+
+    # Calculate Summary Stats ----------------------------------
+    beerStats <- calc.nineNumSummary(dataName="Beer", drinkServingsByCountry$beer)
+    spiritStats <- calc.nineNumSummary(dataName="Spirits", drinkServingsByCountry$spirits)
+    wineStats <- calc.nineNumSummary(dataName="Wine", drinkServingsByCountry$wine)
+    totalStats <- calc.nineNumSummary(dataName="All", drinkServingsByCountry$total)
+
+  # DISTRIBUTION FITTING AND PARAMETER ESTIMATION --------------
+    
+    # Estimate Gamma Parameters --------------------------------
+      # Estimate alpha (shape) and beta (scale)
+        gammaParameters_beer <- calc.estimateGammaParametersUsingMoM(sampleData=drinkServingsByCountry$beer)
+        gammaParameters_spirits <- calc.estimateGammaParametersUsingMoM(sampleData=drinkServingsByCountry$spirits)
+        gammaParameters_wine <- calc.estimateGammaParametersUsingMoM(sampleData=drinkServingsByCountry$wine)
+        gammaParameters_total <- calc.estimateGammaParametersUsingMoM(sampleData=drinkServingsByCountry$total)
+
+    # Estimate Exponential Parameters --------------------------
+      # Estimate beta (scale)
+        exponentialParameter_beer <- calc.estimateBetaUsingMoM(sampleData=drinkServingsByCountry$beer)
+        exponentialParameter_spirits <- calc.estimateBetaUsingMoM(sampleData=drinkServingsByCountry$spirits)
+        exponentialParameter_wine <- calc.estimateBetaUsingMoM(sampleData=drinkServingsByCountry$wine)
+        exponentialParameter_total <- calc.estimateBetaUsingMoM(sampleData=drinkServingsByCountry$total)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# RENDERING PARAMETERS -----------------------------------------
+
+  # World Map Data ---------------------------------------------
+    sPDF <- render.createSPDF(drinkServingsByCountry)
+
+  #Summary Stats Table -----------------------------------------
+
+    # Create Rendering Parameters ------------------------------
+    title <- "Summary Stats for Global Data\n(Servings of Alcohol Consumed Per Capita)"
+    colNames <- c("Alcohol\nType","Mean","Std Dev","Min","2.5th\nPCTL", "Q1", "Median", "Q3", "97.5th\nPCTL", "Max")
+    summaryStatsList <- list(beerStats, spiritStats, wineStats, totalStats)
+```
+<br>
+
+## Abstract
+
+The objective of this project was to estimate the distributions of average alcohol consumption by country and type, as well as to provide world maps for each beverage to display consumption by country. Using method of moments estimators for the gamma and exponential distributions, we estimated the distribution of each beverage. The gamma distribution fit spirit and wine consumption best and beer consumption could be modeled with either the gamma or exponential distributions. The analysis shows that there is high variability in alcohol consumption across countries. While we determined approximate distributions for each variable, inclusion of additional variables such as legal drinking age could allow us to discover interesting correlations with alcohol consumption.
+
+## Introduction
+
+In this project we will analyze data gathered by the World Health Organization containing measures of average alcohol consumption by country among those 15 and older in the year 2010. The data consists of averages categorized by beverage type: beer (typically 5% alcohol by volume), spirits (typically 30-40% alcohol by volume), and wine (typically 13.5% alcohol by volume). There are values for 193 countries in the 3 categories.
+
+Alcohol consumption is likely correlated with other variables such as life expectancy, general health, incarceration rates, and educational achievement. This implies that useful insights might be gained by studying how alcohol consumption varies from country to country.
+
+Therefore, the goal of this analysis is to find approximating distributions for the average consumption of the various beverage types, and then present intuitive visualizations for the results. We will use our knowledge of parameter estimation methods to tailor our chosen distributions to the data as closely as possible. Among the visualizations, we will include world map diagrams representing average consumption rates for each of the measured alcohol categories across countries.
+
+A complete data dictionary explaining each of the variables is available in the [Appendix].
+
+## Methods {.tabset}
+
+### Data
+In the [Appendix] one may observe that the data has both categorical and quantitative variables; "country" is the only categorical variable and "beer_servings", "spirit_servings", and "wine_servings" are each numerical. Each row shows the different levels of consumption for each country.  Prior to analysis we added a fourth category for total consumption, which is a summation of the three numerical variables.
+
+The data gathered by the WHO was initially measured in average liters of pure alcohol per capita. However, to make the presentation more intuitive these measurements were transformed into standard servings as a function of the measured liters and the average alcohol content for each respective category.
+
+In order to predict the distribution of our sample, we plotted histograms and box plots for each of the beverages, as well as a table of summary statistics.
+<br><br>
+```{r, fig.height = 5, fig.width = 10, fig.align = "center", fig.asp=3/10, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# Render Summary Stats Table -------------------------------
+par(mfrow=c(1,1), mar=c(0,0,0,0))
+render.SummaryStatsTable(summaryStatsList, title = title, colNames = colNames)
+```
+<br>
+Some interesting trends to note in this table are that the mean is always significantly higher than the median in all 4 cases, indicating that our data is skewed. The size of the differences imply that a relatively small number of the data points have a large impact on the means.  Additionally, the standard deviations are very high relative to their respective means, implying thin spreads over large ranges. Below we plot the data to give a more intuitive sense of this variation.
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center", fig.asp=0.5, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# Beer Histogram and Box Plots
+par(mfrow=c(1,2), mar=c(4,3,5,3))
+
+      render.HistogramAndBoxPlot(
+        sampleData = drinkServingsByCountry$beer,
+        alcoholType="Beer",
+        barColor = barColor_beer,
+        borderColor = borderColor_beer)
+```
+<br>
+Here we have the graphical summaries for average beer consumption. The histogram and box plot indicate that this sample is strongly skewed right, however there are no apparent outliers in the data. We observe similar trends in the data for the other alcohol categories, as shown below.
+<br>
+```{r, fig.height = 10, fig.width = 10, fig.align = "center", fig.asp=0.5, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# Spirits Histogram and Box Plots
+par(mfrow=c(1,2), mar=c(4,3,5,3))
+
+      render.HistogramAndBoxPlot(
+        sampleData = drinkServingsByCountry$spirits,
+        alcoholType="Spirits",
+        barColor = barColor_spirits,
+        borderColor = borderColor_spirits)
+```
+<br>
+```{r, fig.height = 10, fig.width = 10, fig.align = "center", fig.asp=0.5, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# Wine Histogram and Box Plots
+par(mfrow=c(1,2), mar=c(4,3,5,3))
+
+      render.HistogramAndBoxPlot(
+        sampleData = drinkServingsByCountry$wine,
+        alcoholType="Wine",
+        barColor = barColor_wine,
+        borderColor = borderColor_wine)
+```
+<br>
+```{r, fig.height = 10, fig.width = 10, fig.align = "center", fig.asp=0.5, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# Total Histogram and Box Plots
+par(mfrow=c(1,2), mar=c(4,3,5,3))
+
+      render.HistogramAndBoxPlot(
+        sampleData = drinkServingsByCountry$total,
+        alcoholType="All Alcohol",
+        barColor = barColor_total,
+        borderColor = borderColor_total)
+```
+<br>
+The graphical and numerical summaries for both spirits and wine consumption show that these samples are are even more dramatically right-skewed than the beer sample. Total consumption seems to show a fairly smooth merging of the three categories. Because each sample is significantly skewed, using a symmetric distsribution such as the normal to estimate a model would likely result in a poor fit of the data. Additionally, we are not looking to analyze proportions in this data, therefore a beta distribution would make little sense. Instead, we will assume gamma and exponential distributions in order to model our data.  
+
+### Models
+While it is not possible to find analytic solutions for the Maximum Likelihood estimators of a Gamma distribution, we can use the Method of Moments to yield the following estimators for $\tilde{\alpha}$ (the shape) and $\tilde{\beta}$ (the scale):
+
+$$
+\tilde{\alpha} = \frac{\bar{x}^2}{\overline{x^2} - \bar{x}^2}
+$$
+
+$$
+\tilde{\beta} = \frac{\overline{x^2} - \bar{x}^2}{\bar{x}}
+$$
+
+where $\bar{x}$ is the sample mean:
+
+$$
+\bar{x} = \frac{1}{n}\sum_{i = 1}^{n}x_i
+$$
+and $\overline{x^2}$ is the second sample moment:
+$$
+\overline{x^2} = \frac{1}{n}\sum_{i = 1}^{n}x_i^2
+$$
+Using these estimators, we can estimate values for ${\alpha}$ and ${\beta}$ for each beverage type to construct a gamma curve that will fit the data.  
+
+
+Similarly, we may estimate $\tilde{\beta}$ (the scale parameter) of the exponential distribution using the Method of Moments as follows: 
+$$
+\tilde{\beta} = \bar{x}
+$$
+
+In order to generate the world maps, we'll make use of the `rworldmap` package. We will produce separate maps for beer consumption, spirit consumption, wine consumption, and total alcohol consumption in order to provide a big picture perspective on average alcohol consumption around the world. 
+
+<br>
+<hr>
+<br>
+
+## Results
+
+Starting with the distribution for beer consumption using the equations listed above, we calculate $\tilde{\alpha}$ = 1.11 and $\tilde{\beta}$ = 95.9 for our gamma estimators, and $\tilde{\lambda}$ = $1/\tilde{\beta}$ = 0.00942 for our exponential estimator. Similarly we can estimate the parameters for each of the other categories of average consumption, enabling us to produce the following graphs:
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center", fig.asp=1, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# Beer Plots
+par(mfrow=c(2,2), mar=c(4,4.2,5,3))
+
+      render.HistogramAndDistributionCurves(
+        sampleData = drinkServingsByCountry$beer,
+        gammaParams = gammaParameters_beer,
+        exponentialParams = exponentialParameter_beer,
+        alcoholType = "Beer",
+        barColor = barColor_beer,
+        borderColor = borderColor_beer)
+      
+      render.HistogramAndDistributionCurves(
+        sampleData = drinkServingsByCountry$spirits,
+        gammaParams = gammaParameters_spirits,
+        exponentialParams = exponentialParameter_spirits,
+        alcoholType = "Spirits",
+        barColor = barColor_spirits,
+        borderColor = borderColor_spirits)
+      
+      render.HistogramAndDistributionCurves(
+        sampleData = drinkServingsByCountry$wine,
+        gammaParams = gammaParameters_wine,
+        exponentialParams = exponentialParameter_wine,
+        alcoholType = "Wine",
+        barColor = barColor_wine,
+        borderColor = borderColor_wine)
+      
+      render.HistogramAndDistributionCurves(
+        sampleData = drinkServingsByCountry$total,
+        gammaParams = gammaParameters_total,
+        exponentialParams = exponentialParameter_total,
+        alcoholType = "All Alcohol",
+        barColor = barColor_total,
+        borderColor = borderColor_total)
+```
+<br>
+While these graphs provide some insight as to how our estimates look in comparison to the actual data, simply looking at them doesn't necessarily indicate which distributions are a better fit for which beverages. Therefore, below we produce qq-plots for each category to provide a better sense of the fit.
+```{r, fig.height = 10, fig.width = 10, fig.align = "center", fig.asp=1, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# Spirits Plots
+par(mfrow=c(2,2), mar=c(4,4.2,5,3))
+
+      render.OverlayQQPlotsForDists(sampleData=drinkServingsByCountry$beer,
+        distFuncs=list(dist01=qgamma, dist02=qexp),
+        listOfDistParams=list(dist01=gammaParameters_beer, dist02=exponentialParameter_beer^-1),
+        distColors=list(dist01=gammaColor_curves, dist02=exponentialColor_curves),
+        distNames=list(dist01="Gamma", dist02="Exponential"),
+        alcoholType="Beer",
+        lineCol=borderColor_beer)
+        
+      render.OverlayQQPlotsForDists(sampleData=drinkServingsByCountry$spirits,
+        distFuncs=list(dist01=qgamma, dist02=qexp),
+        listOfDistParams=list(dist01=gammaParameters_spirits, dist02=exponentialParameter_spirits^-1),
+        distColors=list(dist01=gammaColor_curves, dist02=exponentialColor_curves),
+        distNames=list(dist01="Gamma", dist02="Exponential"),
+        alcoholType="Spirits",
+        lineCol=borderColor_spirits)
+      
+      render.OverlayQQPlotsForDists(sampleData=drinkServingsByCountry$wine,
+        distFuncs=list(dist01=qgamma, dist02=qexp),
+        listOfDistParams=list(dist01=gammaParameters_wine, dist02=exponentialParameter_wine^-1),
+        distColors=list(dist01=gammaColor_curves, dist02=exponentialColor_curves),
+        distNames=list(dist01="Gamma", dist02="Exponential"),
+        alcoholType="Wine",
+        lineCol=borderColor_wine)
+      
+      render.OverlayQQPlotsForDists(sampleData=drinkServingsByCountry$total,
+        distFuncs=list(dist01=qgamma, dist02=qexp),
+        listOfDistParams=list(dist01=gammaParameters_total, dist02=exponentialParameter_total^-1),
+        distColors=list(dist01=gammaColor_curves, dist02=exponentialColor_curves),
+        distNames=list(dist01="Gamma", dist02="Exponential"),
+        alcoholType="All Alcohol",
+        lineCol=borderColor_total)
+```
+
+Observing the QQ-Plots, it is apparent that the Gamma and Exponential distributions produce similar fits to the data.  In the case of average beer consumption, the theoretical values fit reasonably well up until the tail of the distribution, at which point they begin to diverge. This is the case for average spirits consumption as well, but the divergence is less dramatic, showing a better fit throughout.
+
+It is not clear that one distribution fits the data better than the other in either case.  Unfortunately, in the case of average wine consumption neither distribution appears to fit the data very well. However, being the more flexible of the two, the Gamma distribution is better able to accomodate the strange 'L' shape of the data, and produces a better fit.
+
+In the case of total alcohol consumption, the estimated values fit as one might expect from an average of the three categories, showing the overall trend:  Decent estimation between 0 servings and the mean, followed by slightly biased estimation above the mean until the divergence begins to incrase rapidly in the tail. Neither distribution appears to be significantly better in fit than the other.
+
+<br>
+<font size="12">World Map Representation</font>
+
+Lastly, to get a sense for how alcohol consumption is distributed globally, we have provided color-coded maps showing the average consumption for each country.  Regions colored in black represent countries for which we have no data.
+<br><br>
+```{r fig.height = 10, fig.width = 20, fig.align = "center", fig.asp=0.35, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# WORLD MAPS 1 --------------------------------------------------
+par(mfrow=c(1,2), mar=c(0,0,2,0))
+      render.showWorldMap(sPDF = sPDF, nameColumnToPlot="beer", mapTitle="Beer Consumption\n(Average Servings Per Capita)", intervals = 9, palName="Greens")
+      render.showWorldMap(sPDF = sPDF, nameColumnToPlot="spirits", mapTitle="Spirits Consumption\n(Servings Per Capita)", intervals = 9, palName="Blues")
+```
+<br><br><br>
+```{r fig.height = 10, fig.width = 20, fig.align = "center", fig.asp=0.35, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# WORLD MAPS 2 --------------------------------------------------
+par(mfrow=c(1,2), mar=c(0,0,2,0))
+      render.showWorldMap(sPDF = sPDF, nameColumnToPlot="wine", mapTitle="Wine Consumption\n(Average Servings Per Capita)", intervals = 9, palName="Purples")
+      render.showWorldMap(sPDF = sPDF, nameColumnToPlot="total", mapTitle="Total Alcohol Consumption\n(Servings Per Capita)", intervals = 9, palName="YlOrRd")
+```
+
+## Discussion
+
+After analysis, it is apparent that our choice of distributions were not ideal.  Because the exponential is a subset of the gamma, it is only logical to expect that both would produce similar results.  However, they do seem to provide decent predictions of the data within certain bounds.  Ultimately, the purpose of this study was to confirm and analyze the trend of variation for beer consumption globally.  We have demonstrated that alcohol consumption is highly variable, not only among countries, but among types of alcohol.  This opens up the opportunity for other interesting analysis in the future.  Beyond this study we have observed that the shapes of the data for each of the categories seem similar to the shapes of income and wealth distributions, which are known to follow log-normal and Pareto distributions respectively.  Thus, it may be highly informative to analyze correlations between these variables in future studies. Another variable of potential interest would be religiosity.  Many of the predominantly Muslim countries such as Afghanistan would presumably drink less alcohol of any type.  A correlation study on these sorts of demographic variables could yield many interesting and useful results.
+
+## Appendix
+
+The variables contained in the data set are:  
+
+`country`, the name of the country  
+`beer_servings`, the number of beer servings per capita  
+`spirit_servings`, the number of spirit servings per capita  
+`wine_servings`, the number of wine servings per capita
