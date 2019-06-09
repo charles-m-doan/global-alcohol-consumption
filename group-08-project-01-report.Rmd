@@ -34,13 +34,9 @@ options(width = 1000)
 
 # INTILIZATION -------------------------------------------------
 
-#Set the working directory to the path containing the source and data files
-  baseDirectory <- "C:/Users/cmatt/OneDrive/Documents/OSU/Semester 04 (Spring 2019)/STAT 3202/Group Project I"
-  setwd(baseDirectory)
-
 # Import relevant data into global environment
   # Load data file
-    gp01_data <- read.csv("https://daviddalpiaz.github.io/stat3202-sp19/project/proj-01/data/drinks.csv", header = TRUE)
+    gp01_data <- read.csv("https://raw.githubusercontent.com/charles-m-doan/global-alcohol-consumption/master/data/drinks.csv", header = TRUE)
 
   # Clean up data for convenience and include total servings
     drinkServingsByCountry <- data.frame(country=gp01_data$country,
