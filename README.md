@@ -1,8 +1,8 @@
 # Global Alcohol Consumption
 
-An analysis of alcohol consumption across countries using R and statistical estimation techniques. This was a group project for STAT 3202 at The Ohio State University during the Spring Semester of 2019.
+An analysis of alcohol consumption across countries using R and statistical estimation techniques. This was a group project for STAT 3202 at The Ohio State University during the Spring Semester of 2019 assigned by professor David Dalpiaz.
 
-The original project description by the instructor can be seen <a href="https://daviddalpiaz.github.io/stat3202-sp19/project/proj-01/proj-01.html">here</a> with the page for our specific data set shown <a href="https://daviddalpiaz.github.io/stat3202-sp19/project/proj-01/proj-01-L.html">here</a>
+The original project description by the instructor can be seen <a href="https://daviddalpiaz.github.io/stat3202-sp19/project/proj-01/proj-01.html">here</a> with the page for our specific data set shown <a href="https://daviddalpiaz.github.io/stat3202-sp19/project/proj-01/proj-01-L.html">here</a>.
 
 ## Viewing The Markdown Report
 
